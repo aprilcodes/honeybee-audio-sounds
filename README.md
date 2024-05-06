@@ -1,6 +1,10 @@
 # honeybee-audio-sounds
 Machine learning project on honeybee audio data
 
+Original datasets are located at:
+https://hw.hermistonconsulting.com/sound_25.sql
+https://hw.hermistonconsulting.com/sensordata_25.sql
+
 Sensor & Sound Data Files Pre-Processing & Modeling
 
 1 & 2:
