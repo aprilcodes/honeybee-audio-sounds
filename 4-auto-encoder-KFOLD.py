@@ -10,8 +10,16 @@ from sklearn.metrics import mean_squared_error
 import tensorflow as tf
 import keras
 from keras import layers
+import matplotlib.pyplot as plt
 
 audio_data = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/sensor_sound_merged.csv")
+
+#sensor = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/hermiston_sensor_df.csv")
+#sound = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/hermiston_sensor_df.csv")
+
+#print("Sensor: ", sensor.shape)
+#print("Sound: ", sound.shape)
+
 
 # narrowing down which columns contain the Hertz values, so I can get min/max of these columns as a whole
 # the range 44:444 will include all, from C1_10 to C3991_4000
@@ -22,10 +30,9 @@ audio_data = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollinat
 # print(audio_data.iloc[30:36,244:444])
 
 non_hertz_subset_1 = audio_data.iloc[:, 0:44]
-print("Non Hertz 1:", non_hertz_subset_1)
-
+#print("Non Hertz 1:", non_hertz_subset_1)
 non_hertz_subset_2 = audio_data.iloc[:, 444:451]
-print("Non Hertz 2:", non_hertz_subset_2)
+#print("Non Hertz 2:", non_hertz_subset_2)
 
 hertz_subset = audio_data.iloc[:, 44:244]
 min_value = hertz_subset.min().min()
@@ -39,23 +46,27 @@ hertz_columns = audio_data.columns[44:244]
 audio_data_subset = audio_data[hertz_columns].astype(float) / 86312.
 
 # Check for NaN values in the entire DataFrame
-nan_df = audio_data_subset.isna()
-print(nan_df)
+#nan_df = audio_data_subset.isna()
+#print(nan_df)
 
 # Count the number of NaN values in each column
-nan_count_per_column = audio_data_subset.isna().sum()
-print(nan_count_per_column)
+#nan_count_per_column = audio_data_subset.isna().sum()
+#print(nan_count_per_column)
 
 # Check if any NaN values exist in the DataFrame
-any_nan = audio_data_subset.isna().any().any()
-print("Any NaN values:", any_nan)
+#any_nan = audio_data_subset.isna().any().any()
+#print("Any NaN values:", any_nan)
 
 # print(audio_data.iloc[1:6, 43:444])
-# print(audio_data.shape) # shape is (484608, 450)
-
+#print(audio_data.shape) # shape is (484608, 450)
+#print(audio_data_subset.shape)
+#print(audio_data_subset.iloc[0:20, 0:10]) # getting a slice to screenshot for slides
+# print(hertz_columns)
+      
 kf = KFold(n_splits=5)
 
 mse_scores = []
+full_reconstructed_data = np.array([]).reshape(0,200)
 
 X = audio_data_subset
 
@@ -72,7 +83,7 @@ for train_index, test_index in kf.split(audio_data_subset):
     #    layers.Dense(200, activation='sigmoid')
     #])
 
-    encoder_output = layers.Dense(100, activation='relu')(input_data)
+    encoder_output = layers.Dense(50, activation='relu')(input_data)
     decoder_output = layers.Dense(200, activation='sigmoid')(encoder_output)
     
     # Combine encoder and decoder into a single model
@@ -81,10 +92,15 @@ for train_index, test_index in kf.split(audio_data_subset):
     autoencoder.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train autoencoder
-    autoencoder.fit(X_train, X_train, epochs=10, batch_size=32, verbose=0)
+    autoencoder.fit(X_train, X_train, epochs=1, batch_size=32, verbose=0)
 
     # Evaluate on test data
     reconstructed_data = autoencoder.predict(X_test)
+
+    if full_reconstructed_data.size == 0:
+        full_reconstructed_data = reconstructed_data
+    else:
+        full_reconstructed_data = np.vstack((full_reconstructed_data, reconstructed_data))
 
     # Compute MSE
     mse = mean_squared_error(X_test, reconstructed_data)
@@ -97,3 +113,34 @@ for i, mse in enumerate(mse_scores):
 # Calculate and print average MSE across all folds
 avg_mse = sum(mse_scores) / len(mse_scores)
 print("Average Mean Squared Error (MSE) across all folds:", avg_mse)
+
+# pre- and post-autoencoder
+print(audio_data_subset.iloc[0:9, 0:20])
+
+full_reconstructed_df = pd.DataFrame(full_reconstructed_data, index=audio_data_subset.index)
+print(full_reconstructed_df.iloc[0:9, 0:20])
+print(full_reconstructed_df.shape)
+
+# reconstructed_data.to_csv("post-autoencoded-reconstruction.csv")
+
+# plot mean squared error per fold
+# NOTES: MSE is very small but fluctuates from run to run
+
+plt.figure(figsize=(10, 5))
+plt.plot(range(1, len(mse_scores)+1), mse_scores, marker='o', linestyle='-', color='b')
+plt.title('Mean Squared Error By Fold')
+plt.xlabel('Fold Number')
+plt.ylabel('MSE')
+plt.grid(True)
+plt.xticks(range(1, len(mse_scores)+1))
+plt.show()
+
+# save the hertz-only subset
+full_reconstructed_df.to_csv("audio_data_subset_post_encoder.csv")
+
+# paste together the whole dataset and save
+non_hertz_subset_1_df = pd.DataFrame(non_hertz_subset_1, index=audio_data_subset.index)
+non_hertz_subset_2_df = pd.DataFrame(non_hertz_subset_2, index=audio_data_subset.index)
+
+audio_data_post_encoder_combined = pd.concat([non_hertz_subset_1_df, full_reconstructed_df, non_hertz_subset_2_df], axis=1, ignore_index=True)
+audio_data_post_encoder_combined.to_csv("audio_data_post_encoder_combined.csv")
