@@ -4,6 +4,7 @@
 
 import numpy as np
 import pandas as pd
+# from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error
@@ -33,17 +34,36 @@ non_hertz_subset_1 = audio_data.iloc[:, 0:44]
 #print("Non Hertz 1:", non_hertz_subset_1)
 non_hertz_subset_2 = audio_data.iloc[:, 444:451]
 #print("Non Hertz 2:", non_hertz_subset_2)
-
 hertz_subset = audio_data.iloc[:, 44:244]
+
+# values of Hertz bins are right-skewed, needs log scaling
+# hertz_dist = hertz_subset.iloc[:,0:10]
+# hertz_dist.hist(alpha=0.5, figsize=(10, 8))
+# plt.title('Hertz Distributions')
+# plt.show()
+
+
+nan_counts = non_hertz_subset_1.isna().sum()
+print("NaN counts:")
+print(nan_counts)
+
 min_value = hertz_subset.min().min()
 max_value = hertz_subset.max().max()
 
 print(f"Min: ", min_value, "Max: ", max_value, "Total Length: ", len(audio_data)) # results are min 5, max 86312
 
-# scaling data to fit the min/max range (absolute maximum scaling)
-
+# scaling data to fit the min/max range (absolute maximum scaling) # is Hertz data skewed post-minmax?
 hertz_columns = audio_data.columns[44:244]
-audio_data_subset = audio_data[hertz_columns].astype(float) / 86312.
+hertz_subset = audio_data[hertz_columns].astype(float) / 86312.
+
+# instead use log scaling
+# epsilon = 1e-9
+# hertz_subset_log = np.log(hertz_subset + epsilon)
+# hertz_subset_log = pd.DataFrame(hertz_subset_log, columns=hertz_subset_log.columns)
+
+first_ten = hertz_subset.iloc[:,0:10]
+first_ten.hist(bins=50, figsize=(20, 15))
+plt.show()
 
 # Check for NaN values in the entire DataFrame
 #nan_df = audio_data_subset.isna()
@@ -68,11 +88,11 @@ kf = KFold(n_splits=5)
 mse_scores = []
 full_reconstructed_data = np.array([]).reshape(0,200)
 
-X = audio_data_subset
+X = hertz_subset
 
 # Iterate over folds
-for train_index, test_index in kf.split(audio_data_subset):
-    X_train, X_test = audio_data_subset.iloc[train_index], audio_data_subset.iloc[test_index]
+for train_index, test_index in kf.split(hertz_subset):
+    X_train, X_test = hertz_subset.iloc[train_index], hertz_subset.iloc[test_index]
     
     input_data = keras.Input(shape=(200,))
 
@@ -115,9 +135,9 @@ avg_mse = sum(mse_scores) / len(mse_scores)
 print("Average Mean Squared Error (MSE) across all folds:", avg_mse)
 
 # pre- and post-autoencoder
-print(audio_data_subset.iloc[0:9, 0:20])
+print(hertz_subset.iloc[0:9, 0:20])
 
-full_reconstructed_df = pd.DataFrame(full_reconstructed_data, index=audio_data_subset.index)
+full_reconstructed_df = pd.DataFrame(full_reconstructed_data, index=hertz_subset.index)
 print(full_reconstructed_df.iloc[0:9, 0:20])
 print(full_reconstructed_df.shape)
 
@@ -139,8 +159,8 @@ plt.show()
 full_reconstructed_df.to_csv("audio_data_subset_post_encoder.csv")
 
 # paste together the whole dataset and save
-non_hertz_subset_1_df = pd.DataFrame(non_hertz_subset_1, index=audio_data_subset.index)
-non_hertz_subset_2_df = pd.DataFrame(non_hertz_subset_2, index=audio_data_subset.index)
+non_hertz_subset_1_df = pd.DataFrame(non_hertz_subset_1, index=hertz_subset.index)
+non_hertz_subset_2_df = pd.DataFrame(non_hertz_subset_2, index=hertz_subset.index)
 
 audio_data_post_encoder_combined = pd.concat([non_hertz_subset_1_df, full_reconstructed_df, non_hertz_subset_2_df], axis=1, ignore_index=True)
 audio_data_post_encoder_combined.to_csv("audio_data_post_encoder_combined.csv")

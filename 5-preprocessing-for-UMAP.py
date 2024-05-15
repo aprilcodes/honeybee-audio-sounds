@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
 
 audio_data = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/audio_data_post_encoder_combined.csv")
 
@@ -34,41 +35,72 @@ audio_UMAP_input.columns = (['sensor_id', 'timestamp', 'pcb_temperature_one', 'h
 # did thorough comparisons before/after to ensure no necessary columns were accidentally dropped
 
 # TBD: is sensor_id useful to the modeling at all? does it give us info that's specific to the hive or its activities?
-# drop it for now
+# same question for volume... we have amplitude in the cells, so does volume provide anything additional?
+# drop both for now
 audio_UMAP_input = audio_UMAP_input.drop(audio_UMAP_input.columns[0], axis=1)
+audio_UMAP_input = audio_UMAP_input.drop('volume', axis=1)
 
 # print(audio_UMAP_input.iloc[0:3, 0:9])
 
-# now that I'm employing timestamp for the first time, it needs to be
-# numerical, not a string
+# there are some zero values in humidity and centroid; replacing zeros with mean of each respective column
+mean_centroid = audio_UMAP_input.loc[audio_UMAP_input['centroid'] != 0, 'centroid'].mean()
+mean_humidity = audio_UMAP_input.loc[audio_UMAP_input['humidity'] != 0, 'humidity'].mean()
+
+audio_UMAP_input.loc[audio_UMAP_input['centroid'] == 0, 'centroid'] = mean_centroid
+audio_UMAP_input.loc[audio_UMAP_input['humidity'] == 0, 'humidity'] = mean_humidity
+
+# now that I'm employing timestamp for the first time, it needs to be numerical, not a string
 
 audio_UMAP_input['timestamp'] = pd.to_datetime(audio_UMAP_input['timestamp'])
 # audio_UMAP_input['timestamp'] = audio_UMAP_input['timestamp'].astype('int64') // 1_000_000_000 # scaling what might be very large #s
 audio_UMAP_input['timestamp'] = audio_UMAP_input['timestamp'].astype('int64') # took the scaling off (from line above) bc we now scale below
 
-# scaling has only happened in the hertz columns so far (MinMaxScaler has identical effect as what hertz columns is scaled to)
-# need to scale timestamp, pcb_temperature_one, humidity, centroid, volume
+# need to scale timestamp, humidity, centroid, pcb_temperature_one
 scaler = MinMaxScaler()
-columns_to_scale = ['timestamp', 'pcb_temperature_one', 'humidity', 'centroid', 'volume']
+columns_to_scale = ['timestamp', 'humidity', 'centroid', 'pcb_temperature_one']
 audio_UMAP_input[columns_to_scale] = scaler.fit_transform(audio_UMAP_input[columns_to_scale])
 
-# need to look at this later
-# audio_UMAP_input.describe()
-
-# now to standardize (mean = 0, sd = 1)
-mean = audio_UMAP_input.mean()
-std = audio_UMAP_input.std()
-
-# Standardize the data
-audio_UMAP_input_standardized = (audio_UMAP_input - mean) / std
-
-# Plot before standardization ### TODO: I haven't run before/after plots but would be helpful to ensure data looks correct
-audio_UMAP_input.hist(alpha=0.5, figsize=(10, 8))
-plt.title('Before Standardization')
-
-# Plot after standardization
-audio_UMAP_input_standardized.hist(alpha=0.5, figsize=(10, 8))
-plt.title('After Standardization')
+# before standardization
+last_ten = audio_UMAP_input.iloc[:,-10:]
+last_ten.hist(alpha=0.5, bins = 50, figsize=(10, 8))
+plt.title('Last Ten')
 plt.show()
 
-audio_UMAP_input_standardized.to_csv("audio_UMAP_input_standardized.csv")
+min_values_before = audio_UMAP_input.min()
+max_values_before = audio_UMAP_input.max()
+print("1st 10 MIN/MAX BEFORE STANDARDIZATION:----------")
+print(min_values_before[0:10])
+print("---------------")
+print(max_values_before[0:10])
+
+print("LAST 10 MIN/MAX BEFORE STANDARDIZATION:----------")
+print(min_values_before[-10:])
+print("---------------")
+print(max_values_before[-10:])
+
+# now to standardize (mean = 0, sd = 1) ### trialing the UMAP process while skipping standardization
+# mean = audio_UMAP_input.mean()
+# std = audio_UMAP_input.std()
+
+# print("Mean Values: ", mean)
+# print("Standard Deviation: ", std)
+
+# Standardize the data
+# audio_UMAP_input_standardized = (audio_UMAP_input - mean) / std
+
+# min_values = audio_UMAP_input_standardized.min()
+# max_values = audio_UMAP_input_standardized.max()
+# print("MIN/MAX AFTER STANDARDIZATION:----------")
+# print(min_values[0:10])
+# print("---------------")
+# print(max_values[0:10])
+
+# after standardization
+# first_ten_standardized = audio_UMAP_input.iloc[:,0:10]
+# first_ten_standardized.hist(alpha=0.5, bins = 50, figsize=(10, 8))
+# plt.title('After Standardization')
+# plt.show()
+
+# audio_UMAP_input_standardized.to_csv("audio_UMAP_input_standardized.csv")
+audio_UMAP_input.to_csv("audio_UMAP_input.csv")
+print("saved")

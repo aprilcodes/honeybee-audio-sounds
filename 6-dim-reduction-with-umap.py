@@ -7,18 +7,24 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import gaussian_kde # for density-based plot
 
-audio_UMAP_input_standardized = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/audio_UMAP_input_standardized.csv")
+audio_UMAP_input = pd.read_csv("C:/ncf-graduate-school/internship-USDA/almond-pollination/data/audio_UMAP_input.csv")
+audio_UMAP_input_mini = audio_UMAP_input.iloc[0:40000, :] # running a tiny subset to save computational time
+
+audio_UMAP_input_mini = audio_UMAP_input_mini.to_numpy()
 
 reducer = umap.UMAP(
-    n_neighbors=5,
-    n_components=2,
+    n_neighbors = 20, # bigger n_neighbors # means longer processing time
+    n_components = 2,
     metric='euclidean',
-    min_dist=0.12,
-    spread=9.999 # was 10, got divide by zero warning
-    # random_state=42
+    min_dist = 0.0001,
+    spread = 35, 
+    n_jobs= -1
 )
 
-embedding = reducer.fit_transform(audio_UMAP_input_standardized)
+embedding = reducer.fit_transform(audio_UMAP_input_mini)
+
+# print("Embedding DataType:")
+# print(type(embedding))
 
 print("starting UMAP plot...")
 #plt.scatter(embedding[:, 0], embedding[:, 1], cmap='Spectral')
