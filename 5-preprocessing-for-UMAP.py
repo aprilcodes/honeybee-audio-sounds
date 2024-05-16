@@ -52,8 +52,7 @@ audio_UMAP_input.loc[audio_UMAP_input['humidity'] == 0, 'humidity'] = mean_humid
 # now that I'm employing timestamp for the first time, it needs to be numerical, not a string
 
 audio_UMAP_input['timestamp'] = pd.to_datetime(audio_UMAP_input['timestamp'])
-# audio_UMAP_input['timestamp'] = audio_UMAP_input['timestamp'].astype('int64') // 1_000_000_000 # scaling what might be very large #s
-audio_UMAP_input['timestamp'] = audio_UMAP_input['timestamp'].astype('int64') # took the scaling off (from line above) bc we now scale below
+audio_UMAP_input['timestamp'] = audio_UMAP_input['timestamp'].astype('int64')
 
 # need to scale timestamp, humidity, centroid, pcb_temperature_one
 scaler = MinMaxScaler()
