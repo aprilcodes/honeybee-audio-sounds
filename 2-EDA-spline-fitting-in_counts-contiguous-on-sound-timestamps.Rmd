@@ -1,0 +1,185 @@
+---
+title: "Spline Fitting All Hives Individually Over 1 Day, Simulating Missing Data for in_count & out_count using sound_timestamp (sparsest timestamps"
+author: "April Ainsworth"
+date: "2024-06-14"
+output: pdf_document
+---
+
+```{r echo=FALSE}
+library(splines)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(lubridate)
+
+all_hives <- read.csv("C:/ncf-graduate-school/internship-USDA/project8-almond-pollination/data/final_merged_data.csv")
+# print(str(all_hives))
+sun_times <- read.csv("C:/ncf-graduate-school/internship-USDA/project8-almond-pollination/data/sun_times.csv")
+
+# hive 12 has most observations of all hives; 2/20 is a good day to work with (no inspections, no odd weather)
+
+one_day = "2023-02-20"
+sunrise = sun_times %>% filter(date == one_day) %>% select(sunrise)
+sunrise_posix <- ymd_hms(sunrise, tz = "PST8PDT")
+# sunrise_posix <- force_tz(sunrise_posix, tzone = "PST8PDT")
+# sunrise_posix <- parse_date_time(sunrise, orders = "Ymd HMS OSz", tz = "UTC")
+# print(sunrise)
+# print(sunrise_posix)
+
+all_hives$sound_timestamp <- as.POSIXct(all_hives$sound_timestamp, format = "%Y-%m-%d %H:%M:%S")
+all_hives$sound_timestamp_numeric <- as.numeric(all_hives$sound_timestamp)
+
+start_time <- as.POSIXct("2023-02-20 05:00:00", format = "%Y-%m-%d %H:%M:%S")
+# start_time <- as.POSIXct(sunrise_posix, format = "%Y-%m-%d %H:%M:%S")
+midnight <- as.POSIXct("2023-02-20 23:59:59", format = "%Y-%m-%d %H:%M:%S")
+
+hive_series = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24)
+
+
+for (one_hive in hive_series) {  
+  print(paste0("Length of Numeric Sound Timestamps for Hive ", one_hive))
+  print(length(unique(one_hive_one_day$sound_timestamp_numeric)))
+
+  one_hive_one_day <- all_hives %>% filter(hive_id_anon == one_hive, sound_timestamp_numeric > start_time & sound_timestamp_numeric <= midnight)
+  # print(one_hive_one_day)
+  
+  # sort by timestamp, create diff columns, merge timestamps with coalesce()
+  one_hive_one_day <- one_hive_one_day %>% arrange(sound_timestamp_numeric) %>% mutate(in_count_diff = coalesce(in_count - lag(in_count), 0), out_count_diff = coalesce(out_count - lag(out_count), 0))
+  
+  # print(one_hive_one_day$in_count_diff)
+  print(paste0("2nd Marker Length of Numeric Timestamps for Hive ", one_hive))
+  print(length(unique(one_hive_one_day$sound_timestamp_numeric)))
+  
+  spline_fit <- smooth.spline(one_hive_one_day$sound_timestamp_numeric, one_hive_one_day$in_count_diff, spar = 0.5)
+  
+#  plot(one_hive_one_day$sound_timestamp_numeric, one_hive_one_day$in_count_diff, main = "Smooth Spline with Subset Data", xlab = #"sound_timestamp_numeric", ylab = "in_count_diff", pch = 19, col = "blue")
+#  lines(spline_fit, col = "red", lwd = 2)
+  
+  spar_vals <- c(0.1, 0.4, 0.6)
+  
+  tst <- lapply(spar_vals, FUN = function(i, dat) {
+    smooth.spline(dat$sound_timestamp_numeric, dat$in_count_diff, spar = i)
+  },
+  dat = one_hive_one_day 
+  )
+  
+  # add back in after getting smooth.spline to work
+  # plot(one_hive_one_day$sound_timestamp_numeric, one_hive_one_day$in_count_diff, pch = 16)
+  # lapply(tst, lines, lty = 3)
+  
+  plot_title_one_hive_one_day <- paste("Smooth Spline with Spar = ", paste(spar_vals, collapse = ", "))
+  
+  plot(one_hive_one_day$sound_timestamp_numeric, one_hive_one_day$in_count_diff, main = plot_title_one_hive_one_day, xlab = "sound_timestamp_numeric", ylab = "in_count_diff", pch = 16)
+  lapply(tst, function(fit) lines(fit, lty = 3))
+  
+  # simulate missingness
+  
+  time_gaps <- c(1, 2, 3, 4, 5, 6, 7, 8)
+  # missing_start <- as.POSIXct("2023-02-20 10:00:00", format = "%Y-%m-%d %H:%M:%S")
+  # missing_start <- as.POSIXct(sunrise_posix, format = "%Y-%m-%d %H:%M:%S")
+  missing_start <- start_time
+  missing_end_times <- missing_start + hours(time_gaps)
+  print(missing_end_times)
+  
+  timestamps_remaining <- length(unique(one_hive_one_day$sound_timestamp_numeric)) # start with all timestamps available, stop when < 5
+  print(paste0("Starting With ", timestamps_remaining, " Timestamps For Hive ", one_hive))
+  # compare time gaps
+  
+  for (end_time in missing_end_times) {
+    print(paste0("end_time is now ", end_time)) # verified that values are correct per iteration
+    end_time_formatted <- format(as.POSIXct(end_time, origin="1970-01-01"), "%Y-%m-%d %H:%M:%S")
+    # if(length(unique(one_hive_one_day$sound_timestamp_numeric)) >= 5) {
+    # timestamps_remaining <- timestamps_remaining - length(unique(one_hive_one_day$sound_timestamp_numeric))
+      ### the number of timestamps that exists between start_time and end_time
+    num_timestamps_in_gap <- sum(one_hive_one_day$sound_timestamp_numeric >= start_time & one_hive_one_day$sound_timestamp_numeric < end_time)
+    timestamps_remaining <- timestamps_remaining - num_timestamps_in_gap
+    print(paste0("Timestamps Remaining Are: ", timestamps_remaining))
+    if (timestamps_remaining >= 4) {
+      print("inside if/else block")
+      one_hive_one_day$in_count_diff[one_hive_one_day$sound_timestamp >= missing_start & one_hive_one_day$sound_timestamp <= end_time] <- NA
+    
+      data_without_na <- one_hive_one_day %>% filter(!is.na(in_count_diff))
+    
+      # fit smooth.spline to completely available data (no NA values)
+      spline_fit <- smooth.spline(data_without_na$sound_timestamp_numeric, data_without_na$in_count_diff)
+    
+      # predict missing values with spline_fit
+      missing_indices <- which(is.na(one_hive_one_day$in_count_diff))
+      predicted_values <- predict(spline_fit, one_hive_one_day$sound_timestamp_numeric[missing_indices])$y
+      # print(predicted_values)
+    
+      # impute the missing values
+      one_hive_one_day$in_count_diff_imputed <- one_hive_one_day$in_count_diff
+      one_hive_one_day$in_count_diff_imputed[missing_indices] <- predicted_values
+      # print(one_hive_one_day$in_count_diff_imputed)
+    
+      spline_df <- data.frame(
+        sound_timestamp_numeric = one_hive_one_day$sound_timestamp_numeric,
+        in_count_diff_spline = predict(spline_fit, one_hive_one_day$sound_timestamp_numeric)$y
+      )
+    
+      # plot original and imputed data
+      plot1 <- ggplot(one_hive_one_day, aes(x = sound_timestamp_numeric)) +
+        geom_point(aes(y = in_count_diff_imputed, color = "Imputed Data"), na.rm = TRUE) +
+        geom_point(aes(y = in_count_diff, color = "Original Data"), na.rm = TRUE) +
+        geom_line(data = spline_df, aes(y = in_count_diff_spline, color = "Spline Fit")) +
+        geom_vline(xintercept = end_time, linetype = "dashed", color = "red", show.legend = TRUE) +
+        annotate("text", x = end_time, y = max(one_hive_one_day$in_count_diff, na.rm = TRUE), label = "End Imputation", color = "red", angle = 90, vjust = -0.5, hjust = 1) +
+        labs(title = paste0("Hive ", one_hive, ": Imputation of Missing Data using predict(), Ending ", end_time_formatted), x = "Timestamp", y = "in_count_diff") +
+        # scale_x_datetime(date_labels = "%Y-%m-%d %H:%M:%S") +
+        scale_color_brewer(palette = "Set1") +
+        theme_minimal() +
+        theme(legend.title = element_blank())
+      
+      print(plot1)
+    
+      # make multiple splines
+      splines_list <- lapply(spar_vals, function(spar) {
+        smooth.spline(data_without_na$sound_timestamp_numeric, data_without_na$in_count_diff, spar = spar)
+      })
+    
+      spline_dfs <- lapply(seq_along(splines_list), function(i) {
+        data.frame(
+          sound_timestamp_numeric = one_hive_one_day$sound_timestamp_numeric,
+          in_count_diff_spline = predict(splines_list[[i]], one_hive_one_day$sound_timestamp_numeric)$y, 
+          spar = paste0("Spline Fit spar=", spar_vals[i])
+        )
+      })
+    
+      combined_spline_df <- do.call(rbind, spline_dfs)
+    
+      # Compare imputed data with actual data (before removal)
+      # Keep a copy of the original data before simulating missing data
+      one_hive_one_day$in_count_diff_original <- one_hive_one_day$in_count - lag(one_hive_one_day$in_count)
+      one_hive_one_day$in_count_diff_original[is.na(one_hive_one_day$in_count_diff_original)] <- 0
+    
+      plot2 <- ggplot(one_hive_one_day, aes(x = sound_timestamp_numeric)) +
+        geom_point(aes(y = in_count_diff_imputed, color = "Imputed Data"), na.rm = TRUE) +
+        geom_point(aes(y = in_count_diff_original, color = "Original Data"), na.rm = TRUE) +
+        geom_line(data = combined_spline_df, aes(x = sound_timestamp_numeric, y = in_count_diff_spline, color = spar), size = 1) +
+        geom_vline(xintercept = end_time, linetype = "dashed", color = "red") +
+        annotate("text", x = end_time, y = max(one_hive_one_day$in_count_diff, na.rm = TRUE), label = "End Imputation", color = "red", angle = 90, vjust = -0.5, hjust = 1) +
+        # TODO: try this for timestamp aes(x = as.POSIXct(sound_timestamp_numeric, origin="1970-01-01")
+        # geom_line(data = spline_df, aes(y = in_count_diff_spline, color = "Spline Fit")) + # change out this for combined_spline_df
+        labs(title = paste0("Hive ", one_hive, ": in_count Imputations For Timespan Ending ", end_time_formatted), x = "Timestamp", y = "in_count_diff") +
+        # scale_x_datetime(date_labels = "%Y-%m-%d %H:%M:%S") +
+        scale_color_brewer(palette = "Set1") +
+        theme_minimal() +
+        theme(legend.title = element_blank())
+      
+      print(plot2)
+      # timestamps_remaining = timestamps_remaining - 1
+      # timestamps_remaining <- length(one_hive_one_day$sound_timestamp >= missing_start & one_hive_one_day$sound_timestamp <= end_time)
+      # timestamps_remaining <- (length(one_hive_one_day$in_count_diff_original) - length(one_hive_one_day$in_count_diff_imputed))
+      # TODO: try this version: timestamps_remaining <- one_hive_one_day %>% filter(sound_timestamp >= missing_start & sound_timestamp <= end_time) %>% count(sound_timestamp)
+      print(paste0("timestamps_remaining is now ", timestamps_remaining))
+    } else {
+      print(paste0("Skipping the remainder of plots for hive", one_hive, "- not enough unique timestamp values\n"))
+      # next
+    }
+  }
+}
+  
+```
+
+
